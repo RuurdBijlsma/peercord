@@ -1,4 +1,6 @@
-# discord
+# peercord
+
+![screenshot](gh-img/screenshot.png)
 
 ## Project setup
 ```
