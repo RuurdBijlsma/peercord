@@ -1,6 +1,5 @@
 <template>
     <div class="server-browser">
-        <md-content class="content">
             <md-list class="server-list">
 
                 <md-list-item>
@@ -77,7 +76,6 @@
 
                 </md-list-item>
             </md-list>
-        </md-content>
     </div>
 </template>
 
@@ -189,6 +187,8 @@
         },
         beforeDestroy() {
             clearInterval(this.serverUserCountUpdater);
+            if(this.meshNetwork)
+                this.meshNetwork.destroy();
         },
     }
 </script>
@@ -196,10 +196,6 @@
 <style scoped>
     .server-browser {
         overflow-y: auto;
-    }
-
-    .content {
-        height: 100%;
     }
 
     .server-list {
