@@ -113,13 +113,11 @@
             }, 2000);
 
             if (this.server) {
-                console.log('this.server', this.server);
                 if (!this.servers.find(s => s.ip === this.server))
                     await this.addServer(this.server);
                 // this.servers.push(await this.updateServerInfo(this.server));
 
                 if (this.room) {
-                    console.log('this.room', this.room);
                     this.connectServer(this.servers.find(s => s.ip === this.server), this.room);
                 }
             }
@@ -148,7 +146,7 @@
             async updateServerInfo(ip, refObj = false) {
                 let rooms = await SimplePeerMesh.getServerRooms(ip);
                 let online = rooms !== null;
-                // console.log('Updating server user count', ip, rooms);
+
                 rooms = rooms || [];
                 if (refObj !== false) {
                     refObj.online = online;
@@ -175,14 +173,13 @@
                 }
             },
             async addServer(ip) {
-                console.log("adding server", ip);
                 if (this.servers.find(s => s.ip === ip))
                     return;
                 let serverInfo = new ServerInfo(ip);
                 this.servers.push(serverInfo);
                 localStorage.servers = JSON.stringify(this.servers.map(s => s.ip));
                 await this.updateServerInfo(ip, serverInfo);
-                console.log("Server info: ", serverInfo);
+
             },
         },
         beforeDestroy() {

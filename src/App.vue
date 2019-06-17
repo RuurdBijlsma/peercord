@@ -8,6 +8,7 @@
     @import url('https://fonts.googleapis.com/css?family=Roboto:400,500,700,400italic|Material+Icons');
 
     #app {
+        height:100%;
         overflow-x: hidden;
         font-family: 'Avenir', Helvetica, Arial, sans-serif;
         -webkit-font-smoothing: antialiased;

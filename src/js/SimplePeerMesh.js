@@ -9,10 +9,12 @@ export default class SimplePeerMesh {
         this.url = '';
         this.peers = {};
         this._events = {};
+        this._eventQueue = [];
         this.printDebug = false;
         this.roomCount = -1;
         this.room = '';
         this.socketId = '';
+        this.broadcastedStream = null;
     }
 
     static async getServerRooms(url) {
@@ -139,6 +141,7 @@ export default class SimplePeerMesh {
     }
 
     broadcastStream(stream) {
+        this.broadcastedStream = stream;
         this.log(`Broadcasting stream to ${this.getConnectedPeerCount()} peers: ${stream}`);
         for (let peer in this.peers) {
             if (this.peers.hasOwnProperty(peer)) {
@@ -162,6 +165,7 @@ export default class SimplePeerMesh {
     }
 
     broadcastRemoveStream(stream) {
+        this.broadcastedStream = null;
         this.log(`broadcastRemoveStream to ${this.getConnectedPeerCount()} peers: ${stream}`);
         for (let peer in this.peers)
             if (this.peers.hasOwnProperty(peer) && this.peers[peer] !== null)
@@ -173,6 +177,9 @@ export default class SimplePeerMesh {
         if (this.wrtc) {
             options.wrtc = this.wrtc;
             this.log('Using wrtc', options)
+        }
+        if (this.broadcastedStream !== null) {
+            options.stream = this.broadcastedStream;
         }
         let peer = new Peer(options);
         peer.on('error', err => {
@@ -248,13 +255,23 @@ export default class SimplePeerMesh {
     }
 
     on(event, fun) {
-        if (!this._events.hasOwnProperty(event)) {
-            this._events[event] = []
-        }
-        this._events[event].push(fun)
+        if (!this._events.hasOwnProperty(event))
+            this._events[event] = [];
+
+        this._events[event].push(fun);
+
+        for (let queueItem of this._eventQueue)
+            if (queueItem.event === event)
+                this._fire(queueItem.event, ...queueItem.parameters);
     }
 
     fire(event, ...parameters) {
+        this._eventQueue.push({event, parameters});
+
+        this._fire(event, ...parameters);
+    }
+
+    _fire(event, ...parameters) {
         if (this._events.hasOwnProperty(event)) {
             for (let fun of this._events[event]) {
                 fun(...parameters)
