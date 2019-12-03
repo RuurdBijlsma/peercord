@@ -89,7 +89,7 @@
         props: ['room', 'server'],
         data() {
             return {
-                serverIp: 'https://ruurd.dev:5858',
+                serverIp: 'https://ruurd.dev:3000',
                 roomName: '',
                 connectedServer: new ServerInfo('-1'),
                 serverUserCountUpdater: false,
