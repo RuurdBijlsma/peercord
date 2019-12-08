@@ -3,7 +3,8 @@
 
 <template>
     <div class="home">
-        <audio v-for="state in privateIdStates" :srcObject.prop="state.stream" :key="listKey" :volume="state.volume" :muted="state.mute" autoplay></audio>
+        <audio v-for="state in privateIdStates" :srcObject.prop="state.stream" :key="listKey" :volume="state.volume"
+               :muted="state.mute" autoplay></audio>
 
         <md-app md-mode="fixed" :md-scrollbar="false">
             <md-app-toolbar class="md-primary">
@@ -103,8 +104,18 @@
                 this.syncedState.user = localStorage.userName;
             this.syncedIdStates['me'] = this.syncedState;
             window.addEventListener('resize', () => this.innerWidth = innerWidth);
+
         },
         methods: {
+            getVoice() {
+                let voices = speechSynthesis.getVoices();
+                return voices[Math.floor(Math.random() * voices.length)];
+            },
+            speak(message) {
+                let utter = new SpeechSynthesisUtterance(message);
+                utter.voice = this.getVoice();
+                speechSynthesis.speak(utter);
+            },
             handleClick(event, item) {
                 this.$refs.vueSimpleContextMenu.showMenu(event, item)
             },
@@ -112,6 +123,7 @@
                 window.alert(JSON.stringify(event))
             },
             sendMessage(message) {
+                this.speak(message);
                 if (!this.peerMesh) return;
                 this.message = '';
 
@@ -157,10 +169,13 @@
                 this.broadcast('initialState', this.syncedState);
 
                 peerMesh.on('connect', id => {
-                    console.log("New connection");
+                    console.log("User connected", id);
+                    this.speak(`User connected`);
                 });
 
                 peerMesh.on('disconnect', id => {
+                    console.log("User disconnected", id);
+                    this.speak(`User disconnected`);
                     delete this.syncedIdStates[id];
                     delete this.privateIdStates[id];
                     this.forceListUpdate();
