@@ -1,15 +1,16 @@
 import Peer from 'simple-peer'
 import socketIo from 'socket.io-client'
+import EventEmitter from 'events';
 
-export default class SimplePeerMesh {
-    constructor(trickle = true, wrtc = false) {
+export default class SimplePeerMesh extends EventEmitter {
+    constructor(appName, trickle = true, wrtc = false) {
+        super();
         this.wrtc = wrtc;
+        this.appName = appName;
         this.trickle = trickle;
         this.socket = null;
         this.url = '';
         this.peers = {};
-        this._events = {};
-        this._eventQueue = [];
         this.printDebug = false;
         this.roomCount = -1;
         this.room = '';
@@ -17,37 +18,31 @@ export default class SimplePeerMesh {
         this.broadcastedStream = null;
     }
 
-    static async getServerRooms(url) {
+    async getServerRooms(url) {
         if (url[url.length - 1] !== '/')
             url += '/';
 
         try {
             let response = await fetch(url + 'rooms');
-            return await response.json()
+            return (await response.json()).filter(room => room.appName === this.appName)
         } catch (e) {
             return null
         }
     }
 
-    join(room) {
+    join(room, hidden = false) {
         this.room = room;
         // Waiting for this promise is dangerous, room count might be incorrect on the server due to bad disconnect
         return new Promise(resolve => {
-            this.socket.emit('join', room);
+            this.socket.emit('join', room, this.appName, hidden);
             let roomCountEventCallback;
             roomCountEventCallback = () => {
-                if (this.roomCount === 1) // Alone in the room
-                {
-                    resolve()
-                } else { // Wait until all peer connections are complete
-                    let fullConnectEventCallback;
-                    fullConnectEventCallback = () => {
-                        resolve();
-                        this.off('fullConnect', fullConnectEventCallback)
-                    };
-                    this.on('fullConnect', fullConnectEventCallback)
-                }
-                this.off('roomCount', roomCountEventCallback)
+                this.off('roomCount', roomCountEventCallback);
+
+                if (this.roomCount === 1)  // Alone in the room
+                    resolve();
+                else // Wait until all peer connections are complete
+                    this.once('fullConnect', () => resolve());
             };
             this.on('roomCount', roomCountEventCallback)
         })
@@ -67,7 +62,7 @@ export default class SimplePeerMesh {
             this.socket.on('roomCount', roomCount => {
                 this.roomCount = roomCount;
                 this.log('New room count: ' + roomCount + ' users');
-                this.fire('roomCount', roomCount);
+                this.emit('roomCount', roomCount);
                 this.checkFullConnect()
             });
 
@@ -83,7 +78,7 @@ export default class SimplePeerMesh {
 
             this.socket.on('socketId', mySocketId => {
                 this.log(`My socket id = ${mySocketId}`);
-                this.fire('socketId', mySocketId);
+                this.emit('socketId', mySocketId);
                 this.socketId = mySocketId;
             });
 
@@ -94,9 +89,13 @@ export default class SimplePeerMesh {
 
             this.socket.on('destroy', socketId => {
                 if (this.peers.hasOwnProperty(socketId)) {
-                    this.peers[socketId].destroy();
+                    try {
+                        this.peers[socketId].destroy();
+                    } catch (e) {
+                        //ignored, peer might already be destroyed error
+                    }
                     delete this.peers[socketId];
-                    this.fire('disconnect', socketId);
+                    this.emit('disconnect', socketId);
                     this.log('Destroying peer', socketId, 'peer count:', this.getConnectedPeerCount())
                 } else {
                     this.log('Unable to destroy peer, it does not exist')
@@ -180,10 +179,12 @@ export default class SimplePeerMesh {
         }
         if (this.broadcastedStream !== null) {
             options.stream = this.broadcastedStream;
+            // console.log("Appending my stream to the new peer!");
         }
         let peer = new Peer(options);
         peer.on('error', err => {
-            this.fire('error', peer, socketId, {peer, error: err, initiator});
+            console.warn(err);
+            this.emit('error', peer, socketId, {peer, error: err, initiator});
             this.log('error', err)
         });
 
@@ -199,22 +200,24 @@ export default class SimplePeerMesh {
         peer.on('connect', () => {
             let peerCount = this.getConnectedPeerCount();
             this.log('New peer connection, peer count: ', peerCount);
-            this.fire('connect', socketId);
+            // console.log(peer, 'connect');
+            this.emit('connect', socketId);
             this.checkFullConnect();
         });
 
         peer.on('data', data => {
-            this.fire('data', socketId, data);
+            this.emit('data', socketId, data);
             this.log('data: ' + data)
         });
 
         peer.on('stream', stream => {
-            this.fire('stream', socketId, stream);
+            console.log("Stream received!");
+            this.emit('stream', socketId, stream);
             this.log('stream: ', stream)
         });
 
         peer.on('track', (track, stream) => {
-            this.fire('track', track, socketId, stream);
+            this.emit('track', track, socketId, stream);
             this.log('track: ', track, 'stream', stream)
         });
 
@@ -237,46 +240,22 @@ export default class SimplePeerMesh {
         let peerCount = this.getConnectedPeerCount();
         if (peerCount + 1 >= this.roomCount) {
             this.log('Fully connected to room, peer count: ', peerCount, 'room count: ', this.roomCount);
-            this.fire('fullConnect')
+            this.emit('fullConnect')
         }
     }
 
     destroy() {
-        this.socket.close();
+        if (this.socket)
+            this.socket.close();
         for (let peer in this.peers)
-            if (this.peers.hasOwnProperty(peer))
-                this.peers[peer].destroy()
-    }
-
-    off(event, fun) {
-        if (this._events.hasOwnProperty(event)) {
-            this._events[event].splice(this._events[event].indexOf(fun), 1)
-        }
-    }
-
-    on(event, fun) {
-        if (!this._events.hasOwnProperty(event))
-            this._events[event] = [];
-
-        this._events[event].push(fun);
-
-        for (let queueItem of this._eventQueue)
-            if (queueItem.event === event)
-                this._fire(queueItem.event, ...queueItem.parameters);
-    }
-
-    fire(event, ...parameters) {
-        this._eventQueue.push({event, parameters});
-
-        this._fire(event, ...parameters);
-    }
-
-    _fire(event, ...parameters) {
-        if (this._events.hasOwnProperty(event)) {
-            for (let fun of this._events[event]) {
-                fun(...parameters)
+            if (this.peers.hasOwnProperty(peer)) {
+                try {
+                    this.peers[peer].destroy();
+                } catch (e) {
+                    //ignored, peer might already be destroyed error
+                }
+                delete this.peers[peer];
             }
-        }
     }
 
     log(...msg) {

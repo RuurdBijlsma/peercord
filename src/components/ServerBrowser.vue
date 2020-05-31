@@ -1,81 +1,81 @@
 <template>
     <div class="server-browser">
-            <md-list class="server-list">
+        <md-list class="server-list">
 
-                <md-list-item>
-                    <div class="md-list-item-text">
-                        <md-field>
-                            <label>Add new server</label>
-                            <md-input v-model="serverIp"></md-input>
-                        </md-field>
-                    </div>
+            <md-list-item>
+                <div class="md-list-item-text">
+                    <md-field>
+                        <label>Add new server</label>
+                        <md-input v-model="serverIp"></md-input>
+                    </md-field>
+                </div>
 
-                    <md-button type="submit" class="md-icon-button md-list-action"
-                               @click="addServer(serverIp); serverIp=''">
-                        <md-icon>add</md-icon>
-                    </md-button>
-                </md-list-item>
+                <md-button type="submit" class="md-icon-button md-list-action"
+                           @click="addServer(serverIp); serverIp=''">
+                    <md-icon>add</md-icon>
+                </md-button>
+            </md-list-item>
 
-                <md-list-item v-for="server in servers" :key="server.ip" :md-expand="server.online"
-                              :md-expanded="server.online">
-                    <md-icon :title="`Checking connection to ${server.ip}`" v-if="server.loading" class="rotate">
-                        cached
-                    </md-icon>
-                    <md-icon :title="`${server.ip} is online`" v-else-if="server.online"
-                             :class="server.ip === connectedServer.ip?'md-primary' : ''">rss_feed
-                    </md-icon>
-                    <md-icon :title="`${server.ip} is offline`" v-else>error_outline</md-icon>
+            <md-list-item v-for="server in servers" :key="server.ip" :md-expand="server.online"
+                          :md-expanded="server.online">
+                <md-icon :title="`Checking connection to ${server.ip}`" v-if="server.loading" class="rotate">
+                    cached
+                </md-icon>
+                <md-icon :title="`${server.ip} is online`" v-else-if="server.online"
+                         :class="server.ip === connectedServer.ip?'md-primary' : ''">rss_feed
+                </md-icon>
+                <md-icon :title="`${server.ip} is offline`" v-else>error_outline</md-icon>
 
-                    <div class="md-list-item-text" :title="server.ip">
-                        {{server.ip}}
-                    </div>
-                    <md-button class="md-icon-button md-list-action"
-                               :title="`Remove ${server.ip} from list`"
-                               v-if="server.ip!==connectedServer.ip"
-                               @click="removeServer(server.ip)">
-                        <md-icon>delete</md-icon>
-                    </md-button>
+                <div class="md-list-item-text" :title="server.ip">
+                    {{server.ip}}
+                </div>
+                <md-button class="md-icon-button md-list-action"
+                           :title="`Remove ${server.ip} from list`"
+                           v-if="server.ip!==connectedServer.ip"
+                           @click="removeServer(server.ip)">
+                    <md-icon>delete</md-icon>
+                </md-button>
 
-                    <md-list slot="md-expand">
-                        <md-list-item class="md-inset">
-                            <div class="md-list-item-text">
-                                <md-field>
-                                    <label>Create room</label>
-                                    <md-input v-model="roomName" required></md-input>
-                                    <span class="md-error">Room cannot be empty</span>
-                                </md-field>
-                            </div>
+                <md-list slot="md-expand">
+                    <md-list-item class="md-inset">
+                        <div class="md-list-item-text">
+                            <md-field>
+                                <label>Create room</label>
+                                <md-input v-model="roomName" required></md-input>
+                                <span class="md-error">Room cannot be empty</span>
+                            </md-field>
+                        </div>
 
-                            <md-button
-                                    :title="`Connect to ${server.ip}#${roomName}`"
-                                    class="md-icon-button md-list-action md-primary"
-                                    @click="connectServer(server, roomName); roomName=''">
-                                <md-icon>keyboard_arrow_right</md-icon>
-                            </md-button>
-                        </md-list-item>
+                        <md-button
+                                :title="`Connect to ${server.ip}#${roomName}`"
+                                class="md-icon-button md-list-action md-primary"
+                                @click="connectServer(server, roomName)">
+                            <md-icon>keyboard_arrow_right</md-icon>
+                        </md-button>
+                    </md-list-item>
 
-                        <md-list-item class="md-inset" v-for="room in server.rooms" :key="room.name">
-                            <div class="md-list-item-text" :title="`${server.ip}#${room.name}`">
-                                <span>{{room.name}}</span>
-                                <span v-if="server.online">Users online: {{room.userCount}}</span>
-                            </div>
-                            <md-button class="md-icon-button md-list-action"
-                                       :title="`Disconnect from ${server.ip}#${room.name}`"
-                                       v-if="room.name === server.room && server.ip === connectedServer.ip"
-                                       @click="disconnectServer(server.ip)">
-                                <md-icon>stop</md-icon>
-                            </md-button>
-                            <md-button class="md-icon-button md-list-action md-primary"
-                                       :title="`Connect to ${server.ip}#${room.name}`"
-                                       v-else
-                                       @click="connectServer(server, room.name)">
-                                <md-icon>keyboard_arrow_right</md-icon>
-                            </md-button>
-                        </md-list-item>
-                    </md-list>
+                    <md-list-item class="md-inset" v-for="room in server.rooms" :key="room.id">
+                        <div class="md-list-item-text" :title="`${server.ip}#${room.id}`">
+                            <span>{{room.id}}</span>
+                            <span v-if="server.online">Users online: {{room.userCount}}</span>
+                        </div>
+                        <md-button class="md-icon-button md-list-action"
+                                   :title="`Disconnect from ${server.ip}#${room.id}`"
+                                   v-if="room.id === server.room && server.ip === connectedServer.ip"
+                                   @click="disconnectServer(server.ip)">
+                            <md-icon>stop</md-icon>
+                        </md-button>
+                        <md-button class="md-icon-button md-list-action md-primary"
+                                   :title="`Connect to ${server.ip}#${room.id}`"
+                                   v-else
+                                   @click="connectServer(server, room.id)">
+                            <md-icon>keyboard_arrow_right</md-icon>
+                        </md-button>
+                    </md-list-item>
+                </md-list>
 
-                </md-list-item>
-            </md-list>
+            </md-list-item>
+        </md-list>
     </div>
 </template>
 
@@ -94,7 +94,7 @@
                 connectedServer: new ServerInfo('-1'),
                 serverUserCountUpdater: false,
                 servers: [],
-                meshNetwork: null,
+                meshNetwork: new SimplePeerMesh('peercord'),
             }
         },
         async mounted() {
@@ -124,11 +124,11 @@
         },
         methods: {
             async connectServer(server, room) {
+                this.roomName = '';
                 if (this.meshNetwork) {
                     this.disconnectServer(this.meshNetwork.url);
                 }
 
-                this.meshNetwork = new SimplePeerMesh();
                 this.meshNetwork.printDebug = false;
 
                 await this.meshNetwork.connect(server.ip, true);
@@ -144,7 +144,7 @@
                 this.$emit('connect', this.meshNetwork);
             },
             async updateServerInfo(ip, refObj = false) {
-                let rooms = await SimplePeerMesh.getServerRooms(ip);
+                let rooms = await this.meshNetwork.getServerRooms(ip);
                 let online = rooms !== null;
 
                 rooms = rooms || [];
@@ -159,7 +159,7 @@
                 if (ip === this.meshNetwork.url) {
                     this.meshNetwork.destroy();
                     this.$emit('disconnect', this.meshNetwork);
-                    this.meshNetwork = null;
+                    // this.meshNetwork = null;
                     this.updateServerInfo(this.connectedServer.ip, this.connectedServer);
                     this.connectedServer = new ServerInfo('-1');
                 } else {
@@ -184,7 +184,7 @@
         },
         beforeDestroy() {
             clearInterval(this.serverUserCountUpdater);
-            if(this.meshNetwork)
+            if (this.meshNetwork)
                 this.meshNetwork.destroy();
         },
     }
