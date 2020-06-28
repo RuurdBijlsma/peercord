@@ -1,6 +1,6 @@
 import Peer from 'simple-peer'
-import socketIo from 'socket.io-client'
 import EventEmitter from 'events';
+import SignalModule from "./SignalModule";
 
 export default class SimplePeerMesh extends EventEmitter {
     constructor(appName, trickle = true, wrtc = false) {
@@ -8,20 +8,17 @@ export default class SimplePeerMesh extends EventEmitter {
         this.wrtc = wrtc;
         this.appName = appName;
         this.trickle = trickle;
-        this.socket = null;
-        this.url = '';
         this.peers = {};
-        this.printDebug = false;
-        this.roomCount = -1;
+        this.printDebug = true;
         this.room = '';
-        this.socketId = '';
         this.broadcastedStream = null;
+
+        this.signal = new SignalModule(appName);
     }
 
     async getServerRooms(url) {
         if (url[url.length - 1] !== '/')
             url += '/';
-
         try {
             let response = await fetch(url + 'rooms');
             return (await response.json()).filter(room => room.appName === this.appName)
@@ -30,88 +27,61 @@ export default class SimplePeerMesh extends EventEmitter {
         }
     }
 
-    join(room, hidden = false) {
-        this.room = room;
-        // Waiting for this promise is dangerous, room count might be incorrect on the server due to bad disconnect
-        return new Promise(resolve => {
-            this.socket.emit('join', room, this.appName, hidden);
-            let roomCountEventCallback;
-            roomCountEventCallback = () => {
-                this.off('roomCount', roomCountEventCallback);
+    async create(room, password = '', hidden = false) {
+        this.signal.create(this.appName, room, password, hidden);
+    }
 
-                if (this.roomCount === 1)  // Alone in the room
-                    resolve();
-                else // Wait until all peer connections are complete
-                    this.once('fullConnect', () => resolve());
-            };
-            this.on('roomCount', roomCountEventCallback)
-        })
+    async join(room, password = '') {
+        this.signal.join(this.appName, room, password);
+        this.room = room;
+        let roomCount = await this.signal.waitFor('room-count', 5000);
+        this.checkFullConnect()
+        if (roomCount !== 1)
+            await this.waitFor('full-connect', 10000);
     }
 
     // On node/electron webSocketOnly might be necessary
-    connect(url, webSocketOnly = false) {
-        return new Promise((resolve, reject) => {
-            this.url = url;
-            let transports = ['websocket'];
-            if (!webSocketOnly) {
-                transports.push('polling')
+    async connect(url, webSocketOnly = false) {
+        await this.signal.connect(url, webSocketOnly);
+
+        this.signal.on('room-count', roomCount => {
+            this.emit('room-count', roomCount);
+            this.checkFullConnect()
+        });
+
+        this.signal.on('socket-id', mySocketId => {
+            this.emit('socket-id', mySocketId);
+        });
+
+        this.signal.on('initialize', (host, socketId) => {
+            this.log('Initializing with ', socketId);
+            this.peers[socketId] = this.createPeer(socketId, true)
+        });
+
+        this.signal.on('destroy', socketId => {
+            if (this.peers.hasOwnProperty(socketId)) {
+                try {
+                    this.peers[socketId].destroy();
+                } catch (e) {
+                    //ignored, peer might already be destroyed error
+                }
+                delete this.peers[socketId];
+                this.emit('disconnect', socketId);
+                this.log('Destroying peer', socketId, 'peer count:', this.getConnectedPeerCount())
+            } else {
+                this.log('Unable to destroy peer, it does not exist')
+            }
+        });
+        this.signal.on('signal', (socketId, signal) => {
+            this.log('Receiving signal from ', socketId);
+
+            if (!this.peers.hasOwnProperty(socketId)) {
+                this.log(`${socketId} is initializing with me`);
+                this.peers[socketId] = this.createPeer(socketId, false)
             }
 
-            this.socket = socketIo(url, {transports});
-
-            this.socket.on('roomCount', roomCount => {
-                this.roomCount = roomCount;
-                this.log('New room count: ' + roomCount + ' users');
-                this.emit('roomCount', roomCount);
-                this.checkFullConnect()
-            });
-
-            this.socket.on('connect', () => {
-                resolve(this.socket);
-                this.log('Connected to socket server')
-            });
-
-            this.socket.on('connect_error', e => {
-                this.log('Error connecting to socket server', e);
-                reject(e)
-            });
-
-            this.socket.on('socketId', mySocketId => {
-                this.log(`My socket id = ${mySocketId}`);
-                this.emit('socketId', mySocketId);
-                this.socketId = mySocketId;
-            });
-
-            this.socket.on('initialize', socketId => {
-                this.log('Initializing with ', socketId);
-                this.peers[socketId] = this.createPeer(socketId, true)
-            });
-
-            this.socket.on('destroy', socketId => {
-                if (this.peers.hasOwnProperty(socketId)) {
-                    try {
-                        this.peers[socketId].destroy();
-                    } catch (e) {
-                        //ignored, peer might already be destroyed error
-                    }
-                    delete this.peers[socketId];
-                    this.emit('disconnect', socketId);
-                    this.log('Destroying peer', socketId, 'peer count:', this.getConnectedPeerCount())
-                } else {
-                    this.log('Unable to destroy peer, it does not exist')
-                }
-            });
-            this.socket.on('signal', ([socketId, signal]) => {
-                this.log('Receiving signal from ', socketId);
-
-                if (!this.peers.hasOwnProperty(socketId)) {
-                    this.log(`${socketId} is initializing with me`);
-                    this.peers[socketId] = this.createPeer(socketId, false)
-                }
-
-                this.log(`Signalling ${socketId}`, signal);
-                this.peers[socketId].signal(signal)
-            })
+            this.log(`Signalling ${socketId}`, signal);
+            this.peers[socketId].signal(signal)
         })
     }
 
@@ -179,7 +149,6 @@ export default class SimplePeerMesh extends EventEmitter {
         }
         if (this.broadcastedStream !== null) {
             options.stream = this.broadcastedStream;
-            // console.log("Appending my stream to the new peer!");
         }
         let peer = new Peer(options);
         peer.on('error', err => {
@@ -190,17 +159,12 @@ export default class SimplePeerMesh extends EventEmitter {
 
         peer.on('signal', data => {
             this.log(`Emitting signal to socket: ${socketId}`);
-            // if (data.renegotiate) {
-            //     this.peers[socketId].destroy();
-            //     delete this.peers[socketId]
-            // }
-            this.socket.emit('message', [socketId, 'signal', data])
+            this.signal.message(socketId, 'signal', data)
         });
 
         peer.on('connect', () => {
             let peerCount = this.getConnectedPeerCount();
             this.log('New peer connection, peer count: ', peerCount);
-            // console.log(peer, 'connect');
             this.emit('connect', socketId);
             this.checkFullConnect();
         });
@@ -238,15 +202,16 @@ export default class SimplePeerMesh extends EventEmitter {
 
     checkFullConnect() {
         let peerCount = this.getConnectedPeerCount();
-        if (peerCount + 1 >= this.roomCount) {
-            this.log('Fully connected to room, peer count: ', peerCount, 'room count: ', this.roomCount);
-            this.emit('fullConnect')
+        console.log(peerCount)
+        // +1 is me :)
+        if (peerCount + 1 >= this.signal.roomCount) {
+            this.log('Fully connected to room, peer count: ', peerCount, 'room count: ', this.signal.roomCount);
+            this.emit('full-connect')
         }
     }
 
     destroy() {
-        if (this.socket)
-            this.socket.close();
+        this.signal.destroy();
         for (let peer in this.peers)
             if (this.peers.hasOwnProperty(peer)) {
                 try {
@@ -262,5 +227,22 @@ export default class SimplePeerMesh extends EventEmitter {
         if (this.printDebug) {
             console.log(...msg)
         }
+    }
+
+    async waitFor(event, timeout = false) {
+        return new Promise((resolve, reject) => {
+            let rejectTimeout;
+            if (timeout !== false) {
+                rejectTimeout = setTimeout(() => {
+                    reject('Timeout while waiting for event ' + event + ' to fire (timeout: ' + timeout + 'ms)');
+                }, +timeout);
+            }
+            this.once(event, (...params) => {
+                if (timeout !== false) {
+                    clearTimeout(rejectTimeout)
+                }
+                resolve(...params);
+            });
+        });
     }
 }

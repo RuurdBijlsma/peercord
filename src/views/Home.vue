@@ -154,6 +154,7 @@
                 return await navigator.mediaDevices.getUserMedia({audio: true, video: false});
             },
             async connected(peerMesh) {
+                console.log("Connected", peerMesh)
 
                 this.showServerBrowser = false;
                 this.peerMesh = peerMesh;
