@@ -138,9 +138,7 @@
                 server.room = room;
                 this.connectedServer = server;
 
-                this.$route.params.server = server.ip;
-                this.$route.params.room = room;
-
+                console.log("Emitting connect")
                 this.$emit('connect', this.meshNetwork);
             },
             async updateServerInfo(ip, refObj = false) {

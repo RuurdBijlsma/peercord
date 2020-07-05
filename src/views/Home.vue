@@ -159,14 +159,13 @@
                 this.showServerBrowser = false;
                 this.peerMesh = peerMesh;
 
-                this.$router.replace({
+                await this.$router.replace({
                     query: {
                         room: peerMesh.room,
                         server: peerMesh.url
                     }
                 });
 
-                console.log("Connected", peerMesh);
                 this.broadcast('initialState', this.syncedState);
 
                 peerMesh.on('connect', id => {
@@ -216,6 +215,7 @@
                     this.forceListUpdate();
                 });
 
+                console.warn("Requesting microphone permissions!")
                 peerMesh.broadcastStream(await this.getMicrophone());
             },
             forceListUpdate() {

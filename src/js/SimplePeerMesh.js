@@ -16,6 +16,10 @@ export default class SimplePeerMesh extends EventEmitter {
         this.signal = new SignalModule(appName);
     }
 
+    get url(){
+        return this.signal.url;
+    }
+
     async getServerRooms(url) {
         if (url[url.length - 1] !== '/')
             url += '/';
