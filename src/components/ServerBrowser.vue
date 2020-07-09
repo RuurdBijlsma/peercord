@@ -80,7 +80,7 @@
 </template>
 
 <script>
-    import SimplePeerMesh from '../js/SimplePeerMesh';
+    import MultiPeerMesh from 'multi-peer-mesh';
     import ServerInfo from '../js/ServerInfo';
 
     export default {
@@ -94,7 +94,7 @@
                 connectedServer: new ServerInfo('-1'),
                 serverUserCountUpdater: false,
                 servers: [],
-                meshNetwork: new SimplePeerMesh('peercord'),
+                meshNetwork: new MultiPeerMesh('peercord'),
             }
         },
         async mounted() {
